@@ -1,0 +1,653 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PRTS 语音记录抓取</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f5f7f8;
+      --panel: #ffffff;
+      --text: #20262d;
+      --muted: #66717d;
+      --line: #d9e0e5;
+      --accent: #18736d;
+      --accent-strong: #115651;
+      --soft: #edf7f5;
+      --warn: #8a5a14;
+      --warn-bg: #fff6df;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--text);
+      font-family: "Microsoft YaHei", "PingFang SC", system-ui, sans-serif;
+      font-size: 15px;
+      letter-spacing: 0;
+    }
+
+    main {
+      width: min(1120px, calc(100vw - 32px));
+      margin: 0 auto;
+      padding: 28px 0;
+    }
+
+    h1 {
+      margin: 0 0 18px;
+      font-size: 24px;
+      font-weight: 700;
+    }
+
+    .workspace {
+      display: grid;
+      grid-template-columns: 360px minmax(0, 1fr);
+      gap: 16px;
+      align-items: start;
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+    }
+
+    .controls {
+      padding: 18px;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 8px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    input[type="text"] {
+      width: 100%;
+      height: 42px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 0 12px;
+      color: var(--text);
+      font: inherit;
+      background: #fff;
+    }
+
+    input[type="text"]:focus {
+      outline: 2px solid rgba(24, 115, 109, 0.18);
+      border-color: var(--accent);
+    }
+
+    .row {
+      display: flex;
+      gap: 8px;
+      margin-top: 14px;
+    }
+
+    button {
+      min-height: 40px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 0 12px;
+      background: #fff;
+      color: var(--text);
+      font: inherit;
+      cursor: pointer;
+    }
+
+    button.primary {
+      flex: 1;
+      border-color: var(--accent);
+      background: var(--accent);
+      color: #fff;
+      font-weight: 600;
+    }
+
+    button.primary:hover {
+      background: var(--accent-strong);
+    }
+
+    button:disabled {
+      cursor: not-allowed;
+      opacity: 0.55;
+    }
+
+    .status {
+      min-height: 22px;
+      margin-top: 12px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    .status.error {
+      color: #9b2424;
+    }
+
+    .lang-list {
+      margin-top: 16px;
+      display: grid;
+      gap: 8px;
+    }
+
+    .lang-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-height: 40px;
+      padding: 9px 10px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #fff;
+    }
+
+    .lang-item:has(input:checked) {
+      border-color: var(--accent);
+      background: var(--soft);
+    }
+
+    .lang-name {
+      flex: 1;
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+
+    .count {
+      color: var(--muted);
+      font-size: 13px;
+      white-space: nowrap;
+    }
+
+    .output-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .output-head h2 {
+      margin: 0;
+      font-size: 16px;
+    }
+
+    .actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    textarea {
+      display: block;
+      width: 100%;
+      min-height: 560px;
+      border: 0;
+      resize: vertical;
+      padding: 16px;
+      color: var(--text);
+      background: #fbfcfd;
+      font: 14px/1.72 "Microsoft YaHei", "PingFang SC", Consolas, monospace;
+      white-space: pre;
+    }
+
+    textarea:focus {
+      outline: none;
+    }
+
+    .empty {
+      padding: 12px;
+      border-radius: 6px;
+      color: var(--warn);
+      background: var(--warn-bg);
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    @media (max-width: 840px) {
+      main {
+        width: min(100vw - 20px, 720px);
+        padding: 16px 0;
+      }
+
+      .workspace {
+        grid-template-columns: 1fr;
+      }
+
+      textarea {
+        min-height: 420px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>PRTS 语音记录抓取</h1>
+    <div class="workspace">
+      <section class="panel controls">
+        <label for="operatorInput">干员名称或 PRTS 地址</label>
+        <input id="operatorInput" type="text" value="令" autocomplete="off">
+        <div class="row">
+          <button class="primary" id="detectButton" type="button">检测语音字段</button>
+        </div>
+        <div id="status" class="status">页面：<span id="pageHint">令/语音记录</span></div>
+        <div id="langList" class="lang-list"></div>
+      </section>
+
+      <section class="panel">
+        <div class="output-head">
+          <h2>TXT 预览</h2>
+          <div class="actions">
+            <button id="selectAllButton" type="button" disabled>全选</button>
+            <button id="copyButton" type="button" disabled>复制</button>
+            <button id="downloadButton" type="button" disabled>下载 TXT</button>
+          </div>
+        </div>
+        <textarea id="preview" readonly></textarea>
+      </section>
+    </div>
+  </main>
+
+  <script>
+    const API_URL = "https://prts.wiki/api.php";
+    const state = {
+      operatorName: "令",
+      raw: "",
+      titles: new Map(),
+      lines: new Map(),
+      langs: new Map(),
+      selectedLangs: new Set()
+    };
+
+    const operatorInput = document.getElementById("operatorInput");
+    const detectButton = document.getElementById("detectButton");
+    const statusBox = document.getElementById("status");
+    const pageHint = document.getElementById("pageHint");
+    const langList = document.getElementById("langList");
+    const preview = document.getElementById("preview");
+    const selectAllButton = document.getElementById("selectAllButton");
+    const copyButton = document.getElementById("copyButton");
+    const downloadButton = document.getElementById("downloadButton");
+
+    function normalizeOperatorName(value) {
+      let text = value.trim();
+      if (!text) {
+        return "";
+      }
+
+      try {
+        if (/^https?:\/\//i.test(text)) {
+          const url = new URL(text);
+          const match = decodeURIComponent(url.pathname).match(/\/w\/([^#?]+)/);
+          text = match ? match[1] : text;
+        }
+      } catch (_error) {
+        // Fall back to the raw input.
+      }
+
+      text = text.replace(/^\/?w\//, "");
+      text = text.split("#")[0].split("?")[0].trim();
+      text = text.replace(/\/语音记录$/, "");
+      return text;
+    }
+
+    function pageNameFor(operatorName) {
+      return `${operatorName}/语音记录`;
+    }
+
+    function apiUrl(pageName) {
+      const params = new URLSearchParams({
+        action: "parse",
+        page: pageName,
+        prop: "wikitext",
+        format: "json",
+        origin: "*"
+      });
+      return `${API_URL}?${params.toString()}`;
+    }
+
+    async function fetchRawWikitext(operatorName) {
+      const response = await fetch(apiUrl(pageNameFor(operatorName)));
+      if (!response.ok) {
+        throw new Error(`请求失败：HTTP ${response.status}`);
+      }
+
+      const data = await response.json();
+      if (data.error) {
+        throw new Error(data.error.info || "页面不存在或无法解析");
+      }
+
+      return data.parse?.wikitext?.["*"] || "";
+    }
+
+    function splitTemplateArgs(body) {
+      const args = [];
+      let start = 0;
+      let depth = 0;
+      let i = 0;
+
+      while (i < body.length) {
+        if (body.startsWith("{{", i)) {
+          depth += 1;
+          i += 2;
+          continue;
+        }
+        if (body.startsWith("}}", i) && depth > 0) {
+          depth -= 1;
+          i += 2;
+          continue;
+        }
+        if (body[i] === "|" && depth === 0) {
+          args.push(body.slice(start, i));
+          start = i + 1;
+        }
+        i += 1;
+      }
+
+      args.push(body.slice(start));
+      return args;
+    }
+
+    function iterVoiceWordTemplates(text) {
+      const result = [];
+      const marker = "{{VoiceData/word|";
+      let pos = 0;
+
+      while (true) {
+        const start = text.indexOf(marker, pos);
+        if (start === -1) {
+          return result;
+        }
+
+        let i = start + 2;
+        let depth = 1;
+        while (i < text.length) {
+          if (text.startsWith("{{", i)) {
+            depth += 1;
+            i += 2;
+            continue;
+          }
+          if (text.startsWith("}}", i)) {
+            depth -= 1;
+            if (depth === 0) {
+              const body = text.slice(start + 2, i);
+              const parts = splitTemplateArgs(body);
+              if (parts.length >= 3 && parts[0] === "VoiceData/word") {
+                result.push({
+                  lang: parts[1].trim(),
+                  text: parts[2].trim()
+                });
+              }
+              pos = i + 2;
+              break;
+            }
+            i += 2;
+            continue;
+          }
+          i += 1;
+        }
+
+        if (i >= text.length) {
+          return result;
+        }
+      }
+    }
+
+    function cleanWikitext(text) {
+      let cleaned = text
+        .replaceAll("{{DrName}}", "博士")
+        .replaceAll("{{DrName|前缀=Dr.}}", "Dr.博士")
+        .replaceAll("{{DrName|语言=中文}}", "博士");
+
+      cleaned = cleaned.replace(/\{\{DrName\|[^{}]*\}\}/g, "博士");
+      cleaned = cleaned.replace(/'''?([^']*?)'''?/g, "$1");
+      cleaned = cleaned.replace(/\[\[(?:[^|\]]*\|)?([^\]]+)\]\]/g, "$1");
+      cleaned = cleaned.replace(/\[(?:https?:\/\/\S+)\s+([^\]]+)\]/g, "$1");
+      cleaned = cleaned.replace(/&nbsp;/g, " ");
+      return cleaned.trim();
+    }
+
+    function extractNumberedFields(raw, fieldName) {
+      const fields = new Map();
+      const pattern = new RegExp(`^\\|${escapeRegExp(fieldName)}(\\d+)=(.*)$`, "gm");
+      let match;
+
+      while ((match = pattern.exec(raw)) !== null) {
+        const index = Number(match[1]);
+        const valueStart = match.index + match[0].indexOf("=") + 1;
+        let valueEnd = raw.length;
+        const rest = raw.slice(pattern.lastIndex);
+        const nextField = rest.match(/^\|[^=\n]+\d*=/m);
+
+        if (nextField && typeof nextField.index === "number") {
+          valueEnd = pattern.lastIndex + nextField.index;
+        }
+
+        fields.set(index, raw.slice(valueStart, valueEnd).trim());
+      }
+
+      return fields;
+    }
+
+    function escapeRegExp(text) {
+      return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    }
+
+    function collectChineseLangs(lines) {
+      const langs = new Map();
+
+      [...lines.keys()].sort((a, b) => a - b).forEach((index) => {
+        iterVoiceWordTemplates(lines.get(index)).forEach(({ lang }) => {
+          if (lang.includes("中文")) {
+            langs.set(lang, (langs.get(lang) || 0) + 1);
+          }
+        });
+      });
+
+      return langs;
+    }
+
+    function extractVoiceLines(selectedLangs) {
+      const selected = new Set(selectedLangs);
+      const result = [];
+
+      [...state.lines.keys()].sort((a, b) => a - b).forEach((index) => {
+        iterVoiceWordTemplates(state.lines.get(index)).forEach(({ lang, text }) => {
+          if (selected.has(lang)) {
+            result.push({
+              index,
+              title: cleanWikitext(state.titles.get(index) || `语音${index}`),
+              lang,
+              text: cleanWikitext(text)
+            });
+          }
+        });
+      });
+
+      return result;
+    }
+
+    function buildTxt(lines) {
+      if (!lines.length) {
+        return "";
+      }
+
+      const langs = [...new Set(lines.map((line) => line.lang))].sort().join(", ");
+      const chunks = [
+        `${state.operatorName}/语音记录 中文语音记录`,
+        `来源: https://prts.wiki/w/${encodeURIComponent(state.operatorName)}/语音记录`,
+        `语言: ${langs}`,
+        ""
+      ];
+
+      lines.forEach((line) => {
+        chunks.push(`${String(line.index).padStart(2, "0")}. ${line.title}`);
+        chunks.push(line.text);
+        chunks.push("");
+      });
+
+      return chunks.join("\n");
+    }
+
+    function renderLangs() {
+      langList.innerHTML = "";
+
+      if (!state.langs.size) {
+        langList.innerHTML = '<div class="empty">没有检测到中文语音字段。</div>';
+        return;
+      }
+
+      [...state.langs.entries()].forEach(([lang, count], index) => {
+        const id = `lang-${index}`;
+        const item = document.createElement("label");
+        item.className = "lang-item";
+        item.htmlFor = id;
+        item.innerHTML = `
+          <input id="${id}" type="checkbox" value="${escapeHtml(lang)}">
+          <span class="lang-name">${escapeHtml(lang)}</span>
+          <span class="count">${count} 条</span>
+        `;
+        langList.appendChild(item);
+      });
+
+      const firstBox = langList.querySelector("input[type='checkbox']");
+      if (firstBox) {
+        firstBox.checked = true;
+        state.selectedLangs = new Set([firstBox.value]);
+      }
+
+      langList.querySelectorAll("input[type='checkbox']").forEach((checkbox) => {
+        checkbox.addEventListener("change", () => {
+          state.selectedLangs = new Set(
+            [...langList.querySelectorAll("input[type='checkbox']:checked")].map((box) => box.value)
+          );
+          updatePreview();
+        });
+      });
+    }
+
+    function escapeHtml(text) {
+      return text
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;");
+    }
+
+    function updatePreview() {
+      const lines = extractVoiceLines(state.selectedLangs);
+      preview.value = buildTxt(lines);
+      const enabled = lines.length > 0;
+      copyButton.disabled = !enabled;
+      downloadButton.disabled = !enabled;
+      selectAllButton.disabled = !state.langs.size;
+      statusBox.className = "status";
+      statusBox.textContent = enabled
+        ? `已选择 ${state.selectedLangs.size} 个字段，预览 ${lines.length} 条。`
+        : "请选择至少一个字段。";
+    }
+
+    async function detect() {
+      const operatorName = normalizeOperatorName(operatorInput.value);
+      if (!operatorName) {
+        setError("请先输入干员名称。");
+        return;
+      }
+
+      state.operatorName = operatorName;
+      pageHint.textContent = pageNameFor(operatorName);
+      setBusy(true);
+      statusBox.className = "status";
+      statusBox.textContent = "正在读取 PRTS 页面...";
+      preview.value = "";
+      langList.innerHTML = "";
+
+      try {
+        state.raw = await fetchRawWikitext(operatorName);
+        state.titles = extractNumberedFields(state.raw, "标题");
+        state.lines = extractNumberedFields(state.raw, "台词");
+        state.langs = collectChineseLangs(state.lines);
+        state.selectedLangs = new Set();
+        renderLangs();
+        updatePreview();
+      } catch (error) {
+        setError(error.message || String(error));
+      } finally {
+        setBusy(false);
+      }
+    }
+
+    function setBusy(isBusy) {
+      detectButton.disabled = isBusy;
+      detectButton.textContent = isBusy ? "检测中..." : "检测语音字段";
+    }
+
+    function setError(message) {
+      statusBox.className = "status error";
+      statusBox.textContent = message;
+      copyButton.disabled = true;
+      downloadButton.disabled = true;
+      selectAllButton.disabled = true;
+    }
+
+    function downloadTxt() {
+      const content = preview.value;
+      if (!content) {
+        return;
+      }
+
+      const filename = `${state.operatorName}_中文语音记录.txt`;
+      const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = filename;
+      link.click();
+      URL.revokeObjectURL(link.href);
+    }
+
+    async function copyTxt() {
+      if (!preview.value) {
+        return;
+      }
+
+      await navigator.clipboard.writeText(preview.value);
+      statusBox.className = "status";
+      statusBox.textContent = "已复制到剪贴板。";
+    }
+
+    function selectAllLangs() {
+      const boxes = [...langList.querySelectorAll("input[type='checkbox']")];
+      const shouldCheck = boxes.some((box) => !box.checked);
+      boxes.forEach((box) => {
+        box.checked = shouldCheck;
+      });
+      state.selectedLangs = new Set(boxes.filter((box) => box.checked).map((box) => box.value));
+      updatePreview();
+    }
+
+    detectButton.addEventListener("click", detect);
+    downloadButton.addEventListener("click", downloadTxt);
+    copyButton.addEventListener("click", copyTxt);
+    selectAllButton.addEventListener("click", selectAllLangs);
+    operatorInput.addEventListener("input", () => {
+      const name = normalizeOperatorName(operatorInput.value);
+      pageHint.textContent = name ? pageNameFor(name) : "";
+    });
+    operatorInput.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        detect();
+      }
+    });
+
+    detect();
+  </script>
+</body>
+</html>
